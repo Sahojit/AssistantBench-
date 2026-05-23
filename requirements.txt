@@ -1,0 +1,10 @@
+streamlit>=1.35.0
+openai>=1.30.0
+google-genai>=1.0.0
+huggingface-hub>=0.22.0
+groq>=0.8.0
+langfuse>=2.0.0
+python-dotenv>=1.0.0
+matplotlib>=3.8.0
+reportlab>=4.0.0
+requests>=2.31.0

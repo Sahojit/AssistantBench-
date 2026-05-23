@@ -1,0 +1,11 @@
+.env
+.venv/
+__pycache__/
+*.pyc
+*.pyo
+.DS_Store
+results/eval_results.json
+results/latency_report.json
+results/flagged_responses.jsonl
+cost_latency_table.md
+*.pdf
