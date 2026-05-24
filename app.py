@@ -209,7 +209,7 @@ def _render_eval_tab(tab):
             for d in dims:
                 st.metric(d.capitalize(), _avg("oss_scores", d), help=f"Avg {d} score (1–5)")
         with col2:
-            st.subheader("Frontier — DeepSeek-V4 Flash")
+            st.subheader("Frontier — Llama 3.3 70B Versatile")
             for d in dims:
                 st.metric(d.capitalize(), _avg("frontier_scores", d), help=f"Avg {d} score (1–5)")
 

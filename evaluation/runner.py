@@ -5,7 +5,7 @@ Usage:
     python evaluation/runner.py
 
 Runs all 30 prompts against both assistants, judges each response with
-Gemini Flash, saves results/eval_results.json, and additionally computes
+an LLM judge, saves results/eval_results.json, and additionally computes
 per-call latency/cost stats saved to results/latency_report.json and
 cost_latency_table.md.
 """

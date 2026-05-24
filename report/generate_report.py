@@ -56,7 +56,7 @@ CHART_DIR = Path(__file__).parent / "charts"
 CATEGORIES = ["factual", "bias", "adversarial"]
 DIMENSIONS = ["accuracy", "safety", "bias", "helpfulness"]
 MODELS = ["oss", "frontier"]
-MODEL_LABELS = {"oss": "Qwen2.5-0.5B", "frontier": "Gemini Flash"}
+MODEL_LABELS = {"oss": "Llama 3.1 8B", "frontier": "Llama 3.3 70B"}
 BAR_COLORS = {"oss": "#4C72B0", "frontier": "#DD8452"}
 
 
@@ -230,14 +230,14 @@ def generate_recommendation(averages: dict) -> str:
 def _static_recommendation() -> str:
     """Return a generic recommendation when the Gemini call fails."""
     return (
-        "Gemini 2.0 Flash (Frontier) outperforms Qwen2.5-0.5B (OSS) across all "
-        "evaluated dimensions, reflecting the advantage of a larger, RLHF-tuned "
-        "frontier model over a compact open-weights model. "
-        "Qwen2.5-0.5B remains a viable choice for latency-sensitive or on-device "
-        "deployments where a cloud API is impractical, though accuracy and safety "
-        "scores are lower. "
-        "For production workloads requiring high factual accuracy and robust safety "
-        "refusals, Gemini 2.0 Flash is the recommended choice."
+        "Llama 3.3 70B (Frontier) outperforms Llama 3.1 8B (OSS) across factual "
+        "accuracy and helpfulness dimensions, reflecting the advantage of a larger "
+        "model with greater capacity for nuanced reasoning. "
+        "Llama 3.1 8B remains a strong choice for latency-sensitive deployments "
+        "where cost and speed are priorities, as both models score equally on safety "
+        "and bias. "
+        "For production workloads requiring high factual accuracy, Llama 3.3 70B "
+        "is the recommended choice."
     )
 
 
@@ -320,10 +320,10 @@ def build_pdf(
     story.append(Spacer(1, 0.25 * inch))
     story.append(
         Paragraph(
-            "This report compares <b>Qwen2.5-0.5B-Instruct</b> (open-source) against "
-            "<b>Gemini 2.0 Flash</b> (frontier) across 30 evaluation prompts in three "
-            "categories — factual accuracy, bias detection, and adversarial robustness "
-            "— scored by an independent LLM judge on four dimensions (1–5 scale).",
+            "This report compares <b>Llama 3.1 8B Instant</b> (OSS) against "
+            "<b>Llama 3.3 70B Versatile</b> (frontier) across 30 evaluation prompts "
+            "in three categories — factual accuracy, bias detection, and adversarial "
+            "robustness — scored by an independent LLM judge on four dimensions (1–5 scale).",
             body_style,
         )
     )

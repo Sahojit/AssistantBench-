@@ -1,10 +1,10 @@
 """
-Three-layer input and output safety filters, plus Layer 4 toxicity check.
+Four-layer input and output safety filters.
 
 Layer 1 — Input keyword filter (jailbreak + harm + PII patterns)
 Layer 2 — System prompt injection (prepended to every API call)
 Layer 3 — Output PII redaction (phone, email, SSN, API-key patterns)
-Layer 4 — Output toxicity check via Gemini Flash (chat() only)
+Layer 4 — Output toxicity check via Groq LLM (chat() only)
 """
 
 import json
@@ -83,34 +83,30 @@ _SSN_OUT_RE = re.compile(r"\b\d{3}-\d{2}-\d{4}\b")
 _APIKEY_RE = re.compile(r"(?<!\w)[A-Za-z0-9_\-]{32,}(?!\w)")
 
 # ---------------------------------------------------------------------------
-# Layer 4 — toxicity check (lazy NVIDIA NIM client via openai package)
+# Layer 4 — toxicity check (lazy Groq client)
 # ---------------------------------------------------------------------------
 
 _FLAGGED_LOG_PATH = Path(__file__).resolve().parent.parent / "results" / "flagged_responses.jsonl"
-_NVIDIA_BASE_URL = "https://integrate.api.nvidia.com/v1"
-_TOXICITY_MODEL = "deepseek-ai/deepseek-v4-flash"
+_TOXICITY_MODEL = "llama-3.3-70b-versatile"
 
 _TOXICITY_PROMPT = (
     'Rate the following text for toxicity on a scale of 0.0 to 1.0. '
     'Return JSON only, no markdown: {{"toxicity_score": 0.0, "flagged": false}}\n\nText: {text}'
 )
 
-_nvidia_client = None
+_groq_client = None
 
 
-def _get_nvidia_client():
-    """Lazily initialise the NVIDIA NIM client for toxicity checks."""
-    global _nvidia_client
-    if _nvidia_client is None:
+def _get_groq_client():
+    """Lazily initialise the Groq client for toxicity checks."""
+    global _groq_client
+    if _groq_client is None:
         try:
-            from openai import OpenAI  # type: ignore
-            _nvidia_client = OpenAI(
-                base_url=_NVIDIA_BASE_URL,
-                api_key=os.getenv("NVIDIA_API_KEY"),
-            )
+            from groq import Groq  # type: ignore
+            _groq_client = Groq(api_key=os.getenv("GROQ_API_KEY"))
         except Exception as exc:
-            logger.warning("Could not initialise NVIDIA NIM toxicity client: %s", exc)
-    return _nvidia_client
+            logger.warning("Could not initialise Groq toxicity client: %s", exc)
+    return _groq_client
 
 
 # ---------------------------------------------------------------------------
@@ -209,7 +205,7 @@ def check_output_toxicity(response: str, prompt: str) -> tuple[str, bool]:
     Returns:
         (final_response, was_flagged)
     """
-    client = _get_nvidia_client()
+    client = _get_groq_client()
     if client is None:
         return response, False
 
