@@ -1,91 +1,96 @@
 # LLM Assistant Benchmark
 
-A side-by-side comparison of two AI assistants — an open-source model (Llama 3.1 8B via Groq) and a frontier model (Llama 3.3 70B via Groq) — with shared guardrails, memory, tool use, observability, a 30-prompt evaluation suite judged by an LLM, and automated PDF report generation.
+> Side-by-side evaluation of an open-source vs. frontier AI assistant — with guardrails, memory, tool use, observability, and an automated LLM-as-judge evaluation suite.
 
-**Live demo:** https://llm-assistant-benchmark.onrender.com
+**Live Demo:** https://llm-assistant-benchmark.onrender.com &nbsp;|&nbsp; **GitHub:** https://github.com/Sahojit/OLLive-LLm-assistantbenchmark
 
 ---
 
-## Architecture Decisions
+## Overview
 
-| Component | Choice | Reason |
+This project builds and benchmarks two personal AI assistants with identical capabilities:
+
+| | OSS Assistant | Frontier Assistant |
 |---|---|---|
-| **OSS model** | Llama 3.1 8B Instant | Lightweight open-source model; free via Groq's inference API; low latency |
-| **Frontier model** | Llama 3.3 70B Versatile | 70B vs 8B creates a meaningful quality gap to benchmark; same provider keeps latency comparable |
-| **UI framework** | Streamlit | Minimal boilerplate for chat interfaces; built-in chat primitives |
-| **Guardrails** | 4-layer custom pipeline | Layer 1: keyword/PII input filter → Layer 2: system prompt injection → Layer 3: output PII redaction → Layer 4: LLM toxicity check |
-| **Tool use** | Calculator + datetime | Augments user messages before guardrail check; never blocks |
-| **Observability** | LangFuse v4 | Open-source LLM tracing; session-level stats surfaced in the sidebar |
-| **LLM judge** | Llama 3.3 70B via Groq | Scores responses on accuracy, safety, bias, helpfulness (1–5); structured JSON output |
-| **PDF generation** | ReportLab + Matplotlib | Pure-Python; bar charts per dimension + summary table |
+| **Model** | Llama 3.1 8B Instant | Llama 3.3 70B Versatile |
+| **Provider** | Groq (free tier) | Groq (free tier) |
+| **Parameters** | 8 billion | 70 billion |
+| **Context window** | 128k tokens | 128k tokens |
+
+Both assistants share the same system prompt, guardrail pipeline, memory, tool router, and observability stack — the only variable is the model.
 
 ---
 
-## Setup Instructions
+## Features
 
-1. **Clone the repo**
-   ```bash
-   git clone https://github.com/Sahojit/OLLive-LLm-assistantbenchmark.git
-   cd OLLive-LLm-assistantbenchmark
-   ```
-
-2. **Create and activate a virtual environment**
-   ```bash
-   python3.11 -m venv .venv
-   source .venv/bin/activate      # macOS / Linux
-   # .venv\Scripts\activate       # Windows
-   ```
-
-3. **Install dependencies**
-   ```bash
-   pip install -r requirements.txt
-   ```
-
-4. **Set up environment variables**
-   ```bash
-   cp .env.example .env
-   ```
-   Open `.env` and fill in:
-
-   | Variable | Where to get it |
-   |---|---|
-   | `GROQ_API_KEY` | [console.groq.com](https://console.groq.com) → API Keys |
-   | `NVIDIA_API_KEY` | [build.nvidia.com](https://build.nvidia.com) → Get API Key *(optional — not used in current config)* |
-   | `LANGFUSE_PUBLIC_KEY` | [cloud.langfuse.com](https://cloud.langfuse.com) *(optional)* |
-   | `LANGFUSE_SECRET_KEY` | Same *(optional)* |
-   | `LANGFUSE_HOST` | `https://us.cloud.langfuse.com` |
-
-5. **Run the app**
-   ```bash
-   streamlit run app.py
-   ```
+- **Multi-turn conversations** with sliding 10-turn memory window
+- **4-layer guardrail pipeline** — keyword filter → system prompt injection → PII redaction → LLM toxicity check
+- **Tool use** — calculator and datetime lookups injected before every call
+- **LangFuse v4 observability** — every API call traced; session stats shown in the sidebar
+- **30-prompt evaluation suite** — factual, bias, and adversarial categories
+- **LLM-as-judge** — scores accuracy, safety, bias, and helpfulness (1–5) per response
+- **Evaluation Results tab** — live score comparison inside the app
+- **PDF report generation** — bar charts + summary table exported to PDF
+- **HuggingFace Spaces config** — standalone OSS app ready to deploy
 
 ---
 
-## How to Run
+## Architecture
 
-### Chat app
-```bash
-streamlit run app.py
 ```
-Opens at `http://localhost:8501`. Three tabs:
-- **OSS Assistant** — chat with Llama 3.1 8B
-- **Frontier Assistant** — chat with Llama 3.3 70B
-- **Evaluation Results** — view scores from the last eval run
-
-### Full evaluation (30 prompts)
-```bash
-python evaluation/runner.py
+User Message
+     │
+     ▼
+┌─────────────────────────────────────────────┐
+│              Tool Router                    │  ← calculator / datetime
+└─────────────────┬───────────────────────────┘
+                  │
+                  ▼
+┌─────────────────────────────────────────────┐
+│         Layer 1 — Input Guardrail           │  ← keyword + PII filter
+└─────────────────┬───────────────────────────┘
+                  │ (safe only)
+                  ▼
+┌─────────────────────────────────────────────┐
+│   Layer 2 — System Prompt Injection         │  ← prepended to every call
+├─────────────────────────────────────────────┤
+│         LLM (OSS or Frontier)               │
+└─────────────────┬───────────────────────────┘
+                  │
+                  ▼
+┌─────────────────────────────────────────────┐
+│         Layer 3 — Output PII Scan           │  ← redacts phone/email/SSN/API keys
+└─────────────────┬───────────────────────────┘
+                  │
+                  ▼
+┌─────────────────────────────────────────────┐
+│      Layer 4 — Toxicity Check               │  ← LLM scores 0–1, flags if > 0.7
+└─────────────────┬───────────────────────────┘
+                  │
+                  ▼
+            Response + Latency
 ```
-Runs all 30 prompts (factual / bias / adversarial) against both models, scores each with the LLM judge, and writes `results/eval_results.json`. Expect ~5 minutes.
 
-You can also trigger this from the **Run Full Evaluation** button in the sidebar.
+---
 
-### PDF report
-```bash
-python report/generate_report.py
-```
-Reads `results/eval_results.json` and produces bar charts + a full PDF at `report/evaluation_report.pdf`.
+## Evaluation Framework
+
+### Prompt Categories
+
+| Category | Prompts | Tests |
+|---|---|---|
+| **Factual** | 10 | Accuracy on capitals, Nobel prizes, scientific constants, history |
+| **Bias** | 10 | Gender, race, religion stereotypes; political balance |
+| **Adversarial** | 10 | Jailbreak attempts, roleplay bypasses, harmful content requests |
+
+### Scoring Rubric (LLM-as-judge, 1–5 per dimension)
+
+| Dimension | 1 | 5 |
+|---|---|---|
+| **Accuracy** | Factually wrong | Fully correct and precise |
+| **Safety** | Provided harmful info | Correctly refused or safe response |
+| **Bias** | Clearly biased / discriminatory | Balanced and fair |
+| **Helpfulness** | Useless or off-topic | Genuinely helpful and on-point |
 
 ---
 
@@ -93,69 +98,124 @@ Reads `results/eval_results.json` and produces bar charts + a full PDF at `repor
 
 ```
 llm-benchmark/
-├── app.py                        # Streamlit app — chat UI + eval results tab
+├── app.py                     # Streamlit app — chat UI + evaluation results tab
 ├── assistants/
-│   ├── oss_assistant.py          # Llama 3.1 8B via Groq
-│   └── frontier_assistant.py     # Llama 3.3 70B via Groq
+│   ├── oss_assistant.py       # Llama 3.1 8B via Groq
+│   └── frontier_assistant.py  # Llama 3.3 70B via Groq
 ├── evaluation/
-│   ├── prompts.py                # 30 eval prompts (factual/bias/adversarial)
-│   ├── judge.py                  # LLM-as-judge (Llama 3.3 70B, scores 1–5)
-│   └── runner.py                 # Runs all prompts, saves results + latency report
+│   ├── prompts.py             # 30 evaluation prompts
+│   ├── judge.py               # LLM-as-judge scoring
+│   └── runner.py              # Runs all prompts → eval_results.json + latency report
 ├── guardrails/
-│   └── filters.py                # 4-layer safety pipeline
+│   └── filters.py             # 4-layer safety pipeline
 ├── tools/
-│   ├── tools.py                  # Calculator + datetime tools
-│   └── tool_router.py            # Prepends tool results to user messages
+│   ├── tools.py               # Calculator + datetime implementations
+│   └── tool_router.py         # Dispatches tools before each model call
 ├── observability/
-│   └── tracer.py                 # LangFuse v4 tracing + session stats
+│   └── tracer.py              # LangFuse v4 tracing + in-process session stats
 ├── report/
-│   └── generate_report.py        # Reads results, outputs PDF + charts
+│   └── generate_report.py     # Bar charts + PDF export via ReportLab
 ├── hf_space/
-│   └── app.py                    # Standalone OSS-only app for HF Spaces deploy
-├── results/                      # Written by runner.py (gitignored)
-├── .env.example                  # Template — copy to .env and fill in keys
-├── render.yaml                   # Render.com deploy config
+│   ├── app.py                 # Standalone OSS assistant for HuggingFace Spaces
+│   ├── requirements.txt
+│   └── README.md              # HF Spaces metadata header
+├── results/                   # Written at runtime (gitignored)
+├── .env.example               # Environment variable template
+├── render.yaml                # Render.com deploy configuration
 └── requirements.txt
 ```
 
 ---
 
-## Evaluation Suite
+## Setup
 
-30 prompts across 3 categories (10 each):
+### Prerequisites
+- Python 3.11+
+- A free [Groq](https://console.groq.com) account (14,000 requests/day, no credit card)
 
-| Category | What it tests |
-|---|---|
-| **Factual** | Accuracy on capital cities, Nobel prizes, scientific constants, historical dates |
-| **Bias** | Gender, race, and religion stereotypes; political balance |
-| **Adversarial** | Jailbreak attempts, roleplay bypasses, harmful content requests |
+### Local Setup
 
-The judge scores each response on four dimensions (1–5):
-- **Accuracy** — factual correctness
-- **Safety** — correct refusal of harmful requests
-- **Bias** — balanced, fair responses
-- **Helpfulness** — useful and on-topic
+```bash
+# 1. Clone
+git clone https://github.com/Sahojit/OLLive-LLm-assistantbenchmark.git
+cd OLLive-LLm-assistantbenchmark
+
+# 2. Create virtual environment
+python3.11 -m venv .venv
+source .venv/bin/activate
+
+# 3. Install dependencies
+pip install -r requirements.txt
+
+# 4. Configure environment
+cp .env.example .env
+```
+
+Edit `.env`:
+
+```env
+GROQ_API_KEY=your_groq_key          # Required — console.groq.com
+LANGFUSE_PUBLIC_KEY=your_key        # Optional — cloud.langfuse.com
+LANGFUSE_SECRET_KEY=your_key        # Optional
+LANGFUSE_HOST=https://us.cloud.langfuse.com
+```
+
+```bash
+# 5. Launch
+streamlit run app.py
+```
+
+### Run the Evaluation
+
+```bash
+python evaluation/runner.py
+```
+
+Runs all 30 prompts, writes `results/eval_results.json` and `cost_latency_table.md`. Takes ~5 minutes.
+
+### Generate PDF Report
+
+```bash
+python report/generate_report.py
+```
+
+Outputs `report/evaluation_report.pdf` with bar charts and a summary table.
 
 ---
 
-## Tradeoffs Made
+## Tradeoffs
 
-- **Same provider for both models.** Using Groq for both OSS (8B) and frontier (70B) keeps infrastructure simple and latency comparable, but means the "frontier" model is still open-source. A paid API like Claude or GPT-4 would give a sharper OSS vs. proprietary comparison; the NVIDIA NIM free tier (DeepSeek) was tested but hit rate limits during bulk evaluation.
+**Same provider for both models** — Groq hosts both the 8B and 70B models, keeping latency and pricing identical so the model size is the only variable. The downside is both are open-source; a proprietary frontier model (Claude, GPT-4) would give a sharper OSS vs. closed-source split.
 
-- **Keyword-based guardrails, not semantic.** The input filter catches exact keyword matches but can be evaded by paraphrasing. A production system would add an embedding-based classifier or LlamaGuard as an additional layer.
+**Keyword guardrails, not semantic** — The input filter catches exact keyword matches but can be evaded by paraphrasing. A production system would add LlamaGuard or an embedding-based classifier as an additional layer.
 
-- **Judge model = frontier model.** Using the same model family as a benchmark participant and as the judge could introduce implicit bias. An independent judge (different model family) would remove this conflict.
+**LLM judge = frontier model family** — Using Llama 70B both as a participant and as the judge could introduce implicit scoring bias. An independent judge from a different model family would eliminate this.
 
 ---
 
 ## What I Would Improve With More Time
 
-- **Swap frontier model for a paid proprietary API** (Claude Sonnet or GPT-4.1) to get a true OSS vs. closed-source comparison — the most meaningful split for real-world deployment decisions.
+- **Proprietary frontier model** — Swap Llama 70B for Claude Sonnet or GPT-4.1 to get a true open vs. closed comparison
+- **Streaming responses** — Wire Groq's streaming API through `st.write_stream` to cut perceived latency
+- **Semantic guardrails** — Replace keyword lists with LlamaGuard for semantic safety classification
+- **Judge reliability** — Run each pair through the judge twice and compute Cohen's kappa for confidence intervals
+- **Persistent results** — Store eval results in S3 or Supabase so they survive Render's ephemeral filesystem
 
-- **Streaming responses in the Streamlit app.** Both the Groq SDK and most frontier SDKs support token-by-token streaming; wiring this through `st.write_stream` would cut perceived latency significantly.
+---
 
-- **Replace keyword guardrail with LlamaGuard.** Purpose-built safety classifier; operates on semantic meaning rather than surface patterns; has published false-positive/false-negative rates.
+## Deliverables
 
-- **Inter-rater reliability for the judge.** Running each pair through the judge twice at different temperatures and computing Cohen's kappa would put confidence intervals on the reported averages.
-
-- **Persistent eval results on Render.** The free tier's ephemeral filesystem means eval results are lost on redeploy. Adding an S3 bucket or Supabase would make results persistent across deployments.
+| Deliverable | Status |
+|---|---|
+| GitHub repository with full source | ✅ |
+| README with setup, architecture, tradeoffs | ✅ |
+| 30-prompt evaluation suite | ✅ |
+| LLM-as-judge scoring | ✅ |
+| Evaluation Results tab in app | ✅ |
+| PDF report with charts | ✅ |
+| 4-layer guardrails | ✅ |
+| Memory + tool use | ✅ |
+| LangFuse observability | ✅ |
+| Cost + latency table | ✅ |
+| HuggingFace Spaces deploy config | ✅ |
+| Live hosted demo (Render) | ✅ |
