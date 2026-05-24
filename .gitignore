@@ -9,3 +9,4 @@ results/latency_report.json
 results/flagged_responses.jsonl
 cost_latency_table.md
 *.pdf
+report/charts/

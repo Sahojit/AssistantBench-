@@ -29,8 +29,7 @@ Both assistants share the same system prompt, guardrail pipeline, memory, tool r
 - **LangFuse v4 observability** — every API call traced; session stats shown in the sidebar
 - **30-prompt evaluation suite** — factual, bias, and adversarial categories
 - **LLM-as-judge** — scores accuracy, safety, bias, and helpfulness (1–5) per response
-- **Evaluation Results tab** — live score comparison inside the app
-- **PDF report generation** — bar charts + summary table exported to PDF
+- **PDF report generation** — bar charts + summary table + AI-written recommendation exported to PDF
 - **HuggingFace Spaces config** — standalone OSS app ready to deploy
 
 ---
@@ -98,7 +97,7 @@ User Message
 
 ```
 llm-benchmark/
-├── app.py                     # Streamlit app — chat UI + evaluation results tab
+├── app.py                     # Streamlit app — side-by-side chat UI
 ├── assistants/
 │   ├── oss_assistant.py       # Llama 3.1 8B via Groq
 │   └── frontier_assistant.py  # Llama 3.3 70B via Groq

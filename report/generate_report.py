@@ -192,7 +192,12 @@ def generate_recommendation(averages: dict) -> str:
     Args:
         averages: The nested averages dict from compute_averages().
     """
-    client = genai.Client(api_key=os.getenv("GOOGLE_API_KEY"))
+    api_key = os.getenv("GOOGLE_API_KEY")
+    if not api_key:
+        logger.warning("GOOGLE_API_KEY not set — using static recommendation.")
+        return _static_recommendation()
+
+    client = genai.Client(api_key=api_key)
 
     lines = []
     for cat in CATEGORIES:
