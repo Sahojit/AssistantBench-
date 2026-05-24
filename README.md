@@ -203,19 +203,4 @@ Outputs `report/evaluation_report.pdf` with bar charts and a summary table.
 
 ---
 
-## Deliverables
 
-| Deliverable | Status |
-|---|---|
-| GitHub repository with full source | ✅ |
-| README with setup, architecture, tradeoffs | ✅ |
-| 30-prompt evaluation suite | ✅ |
-| LLM-as-judge scoring | ✅ |
-| Evaluation Results tab in app | ✅ |
-| PDF report with charts | ✅ |
-| 4-layer guardrails | ✅ |
-| Memory + tool use | ✅ |
-| LangFuse observability | ✅ |
-| Cost + latency table | ✅ |
-| HuggingFace Spaces deploy config | ✅ |
-| Live hosted demo (Render) | ✅ |
