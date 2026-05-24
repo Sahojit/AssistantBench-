@@ -40,7 +40,7 @@ logger = logging.getLogger(__name__)
 RESULTS_PATH = _PROJECT_ROOT / "results" / "eval_results.json"
 LATENCY_REPORT_PATH = _PROJECT_ROOT / "results" / "latency_report.json"
 COST_TABLE_PATH = _PROJECT_ROOT / "cost_latency_table.md"
-INTER_CALL_DELAY = 3.0
+INTER_CALL_DELAY = 2.0
 
 
 def _safe_generate(assistant, prompt: str, label: str) -> tuple[str, float]:

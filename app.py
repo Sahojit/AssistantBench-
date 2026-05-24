@@ -75,7 +75,7 @@ def _load_eval_results() -> dict | None:
 # ---------------------------------------------------------------------------
 with st.sidebar:
     st.title("LLM Benchmark")
-    st.caption("Llama 3.1 8B (Groq) vs DeepSeek-V4 (NVIDIA NIM)")
+    st.caption("Llama 3.1 8B vs Llama 3.3 70B (Groq)")
     st.divider()
 
     st.subheader("OSS Assistant (Llama)")
@@ -84,7 +84,7 @@ with st.sidebar:
 
     st.divider()
 
-    st.subheader("Frontier Assistant (DeepSeek)")
+    st.subheader("Frontier Assistant (Llama 70B)")
     st.metric("Memory window", f"{st.session_state.frontier.get_turn_count()} / 10 turns")
     st.metric("Est. tokens this session", _estimate_tokens(st.session_state.frontier_msgs))
 
@@ -139,13 +139,13 @@ with st.sidebar:
 # ---------------------------------------------------------------------------
 st.title("LLM Assistant Benchmark")
 st.caption(
-    "Compare **Llama 3.1 8B Instant** (OSS via Groq) vs **DeepSeek-V4 Flash** "
-    "(frontier via NVIDIA NIM). Identical guardrails, memory, and system prompts."
+    "Compare **Llama 3.1 8B Instant** (OSS) vs **Llama 3.3 70B Versatile** "
+    "(frontier) — both via Groq. Identical guardrails, memory, and system prompts."
 )
 
 tab_oss, tab_frontier, tab_results = st.tabs([
     "OSS Assistant — Llama 3.1 8B",
-    "Frontier Assistant — DeepSeek-V4 Flash",
+    "Frontier Assistant — Llama 3.3 70B",
     "Evaluation Results",
 ])
 
@@ -270,5 +270,5 @@ def _avg_list(vals: list) -> float:
 
 
 _render_chat_tab(tab_oss, "oss", "oss_msgs", "Llama 3.1 8B Instant", "input_oss", "clear_oss")
-_render_chat_tab(tab_frontier, "frontier", "frontier_msgs", "DeepSeek-V4 Flash (NVIDIA NIM)", "input_frontier", "clear_frontier")
+_render_chat_tab(tab_frontier, "frontier", "frontier_msgs", "Llama 3.3 70B Versatile", "input_frontier", "clear_frontier")
 _render_eval_tab(tab_results)

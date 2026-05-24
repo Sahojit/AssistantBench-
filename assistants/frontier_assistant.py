@@ -1,10 +1,10 @@
-"""Frontier assistant backed by DeepSeek-V4-Flash via NVIDIA NIM (OpenAI-compatible API)."""
+"""Frontier assistant backed by Llama-3.3-70B-Versatile via Groq."""
 
 import logging
 import os
 import time
 
-from openai import OpenAI  # type: ignore
+from groq import Groq  # type: ignore
 
 from guardrails.filters import check_input, check_output_toxicity, get_system_prompt, scan_output
 from observability.tracer import trace_call
@@ -12,14 +12,13 @@ from tools.tool_router import check_tools
 
 logger = logging.getLogger(__name__)
 
-MODEL_ID = "deepseek-ai/deepseek-v4-flash"
-NVIDIA_BASE_URL = "https://integrate.api.nvidia.com/v1"
+MODEL_ID = "llama-3.3-70b-versatile"
 MAX_TURNS = 10
 
 
 class FrontierAssistant:
     """
-    Wraps DeepSeek-V4-Flash via NVIDIA NIM using the OpenAI-compatible API.
+    Wraps Llama-3.3-70B-Versatile via Groq as the frontier-class assistant.
 
     Pipeline for chat():
         check_tools → check_input (guardrail) → model → scan_output → check_output_toxicity
@@ -29,11 +28,8 @@ class FrontierAssistant:
     """
 
     def __init__(self) -> None:
-        """Initialise the NVIDIA NIM client and reset conversation state."""
-        self.client = OpenAI(
-            base_url=NVIDIA_BASE_URL,
-            api_key=os.getenv("NVIDIA_API_KEY"),
-        )
+        """Initialise the Groq client and reset conversation state."""
+        self.client = Groq(api_key=os.getenv("GROQ_API_KEY"))
         self.system_prompt = get_system_prompt()
         self.history: list[dict] = []
 
@@ -129,7 +125,7 @@ class FrontierAssistant:
         )
 
     def _call_api(self, messages: list[dict]) -> tuple[str, float]:
-        """Call the NVIDIA NIM API and return (response_text, latency_ms)."""
+        """Call the Groq API and return (response_text, latency_ms)."""
         t0 = time.perf_counter()
         try:
             completion = self.client.chat.completions.create(
@@ -142,7 +138,7 @@ class FrontierAssistant:
             return completion.choices[0].message.content.strip(), latency_ms
         except Exception as exc:
             latency_ms = (time.perf_counter() - t0) * 1000
-            logger.error("FrontierAssistant (NVIDIA NIM) API error: %s", exc)
+            logger.error("FrontierAssistant (Groq) API error: %s", exc)
             return "I encountered an error processing your request. Please try again.", latency_ms
 
     def _append_turn(self, user_text: str, assistant_text: str) -> None:

@@ -1,4 +1,4 @@
-"""LLM-as-judge module: scores model responses using DeepSeek-V4-Flash via NVIDIA NIM."""
+"""LLM-as-judge module: scores model responses using Llama-3.3-70B via Groq."""
 
 import json
 import logging
@@ -7,12 +7,11 @@ import re
 import time
 from typing import Optional
 
-from openai import OpenAI  # type: ignore
+from groq import Groq  # type: ignore
 
 logger = logging.getLogger(__name__)
 
-JUDGE_MODEL = "deepseek-ai/deepseek-v4-flash"
-NVIDIA_BASE_URL = "https://integrate.api.nvidia.com/v1"
+JUDGE_MODEL = "llama-3.3-70b-versatile"
 _MAX_RETRIES = 4
 _RETRY_DELAY_FALLBACK = 30.0
 
@@ -40,18 +39,15 @@ Return ONLY valid JSON with no surrounding text or markdown fences:
 
 class Judge:
     """
-    Wraps DeepSeek-V4-Flash via NVIDIA NIM to act as an impartial LLM judge.
+    Wraps Llama-3.3-70B via Groq to act as an impartial LLM judge.
 
     Parses the model's JSON output and clamps each dimension score to [1, 5].
     Retries on rate-limit errors. Failures return None so the runner handles gracefully.
     """
 
     def __init__(self) -> None:
-        """Initialise the NVIDIA NIM client for judging."""
-        self._client = OpenAI(
-            base_url=NVIDIA_BASE_URL,
-            api_key=os.getenv("NVIDIA_API_KEY"),
-        )
+        """Initialise the Groq client for judging."""
+        self._client = Groq(api_key=os.getenv("GROQ_API_KEY"))
 
     def score(self, category: str, prompt: str, response: str) -> Optional[dict]:
         """
