@@ -5,7 +5,6 @@ Run with:
     streamlit run app.py
 """
 
-import json
 import subprocess
 import sys
 from pathlib import Path
@@ -25,7 +24,6 @@ from guardrails.filters import check_input  # noqa: E402
 from observability.tracer import configure_session, get_session_stats  # noqa: E402
 
 _PROJECT_ROOT = Path(__file__).parent
-_RESULTS_PATH = _PROJECT_ROOT / "results" / "eval_results.json"
 _VENV_PYTHON = _PROJECT_ROOT / ".venv" / "bin" / "python3"
 _PYTHON = str(_VENV_PYTHON) if _VENV_PYTHON.exists() else sys.executable
 
@@ -59,15 +57,6 @@ def _estimate_tokens(msgs: list[dict]) -> int:
     """Estimate token usage from a message list using the word × 1.3 heuristic."""
     return int(sum(len(m["content"].split()) for m in msgs) * 1.3)
 
-
-def _load_eval_results() -> dict | None:
-    """Load eval_results.json; return None if missing or unreadable."""
-    if not _RESULTS_PATH.exists():
-        return None
-    try:
-        return json.loads(_RESULTS_PATH.read_text(encoding="utf-8"))
-    except Exception:
-        return None
 
 
 # ---------------------------------------------------------------------------
@@ -143,10 +132,9 @@ st.caption(
     "(frontier) — both via Groq. Identical guardrails, memory, and system prompts."
 )
 
-tab_oss, tab_frontier, tab_results = st.tabs([
+tab_oss, tab_frontier = st.tabs([
     "OSS Assistant — Llama 3.1 8B",
     "Frontier Assistant — Llama 3.3 70B",
-    "Evaluation Results",
 ])
 
 
@@ -185,90 +173,5 @@ def _render_chat_tab(tab, assistant_key, msgs_key, model_label, input_key, clear
                 st.rerun()
 
 
-def _render_eval_tab(tab):
-    """Render evaluation results — scores table, per-category averages, and raw responses."""
-    with tab:
-        data = _load_eval_results()
-        if data is None:
-            st.info("No evaluation results yet. Click **Run Full Evaluation** in the sidebar.")
-            return
-
-        st.caption(f"Last run: {data.get('timestamp', 'unknown')}")
-        results = data.get("results", [])
-
-        # ---- Summary metrics ------------------------------------------------
-        dims = ("accuracy", "safety", "bias", "helpfulness")
-
-        def _avg(key: str, dim: str) -> float:
-            vals = [r[key][dim] for r in results if r.get(key) and r[key].get(dim) is not None]
-            return round(sum(vals) / len(vals), 2) if vals else 0.0
-
-        col1, col2 = st.columns(2)
-        with col1:
-            st.subheader("OSS — Llama 3.1 8B")
-            for d in dims:
-                st.metric(d.capitalize(), _avg("oss_scores", d), help=f"Avg {d} score (1–5)")
-        with col2:
-            st.subheader("Frontier — Llama 3.3 70B Versatile")
-            for d in dims:
-                st.metric(d.capitalize(), _avg("frontier_scores", d), help=f"Avg {d} score (1–5)")
-
-        st.divider()
-
-        # ---- Per-category breakdown -----------------------------------------
-        st.subheader("Per-Category Averages")
-        categories = sorted({r["category"] for r in results})
-        for cat in categories:
-            cat_results = [r for r in results if r["category"] == cat]
-            oss_avgs = {d: _avg_list([r["oss_scores"][d] for r in cat_results if r.get("oss_scores") and r["oss_scores"].get(d)]) for d in dims}
-            frontier_avgs = {d: _avg_list([r["frontier_scores"][d] for r in cat_results if r.get("frontier_scores") and r["frontier_scores"].get(d)]) for d in dims}
-
-            with st.expander(f"**{cat.capitalize()}** ({len(cat_results)} prompts)"):
-                c1, c2 = st.columns(2)
-                with c1:
-                    st.markdown("**OSS**")
-                    for d in dims:
-                        st.metric(d.capitalize(), oss_avgs[d])
-                with c2:
-                    st.markdown("**Frontier**")
-                    for d in dims:
-                        st.metric(d.capitalize(), frontier_avgs[d])
-
-        st.divider()
-
-        # ---- Full results table ---------------------------------------------
-        st.subheader("All 30 Prompts")
-        for r in results:
-            with st.expander(f"[{r['category']}] {r['prompt'][:80]}…"):
-                c1, c2 = st.columns(2)
-                with c1:
-                    st.markdown("**OSS Response**")
-                    st.write(r.get("oss_response", "—"))
-                    if r.get("oss_scores"):
-                        s = r["oss_scores"]
-                        st.caption(
-                            f"Accuracy: {s.get('accuracy','?')} | Safety: {s.get('safety','?')} | "
-                            f"Bias: {s.get('bias','?')} | Helpfulness: {s.get('helpfulness','?')}"
-                        )
-                        st.caption(f"_{s.get('reasoning', '')}_")
-                    st.caption(f"Latency: {r.get('oss_latency_ms', 0):.0f} ms")
-                with c2:
-                    st.markdown("**Frontier Response**")
-                    st.write(r.get("frontier_response", "—"))
-                    if r.get("frontier_scores"):
-                        s = r["frontier_scores"]
-                        st.caption(
-                            f"Accuracy: {s.get('accuracy','?')} | Safety: {s.get('safety','?')} | "
-                            f"Bias: {s.get('bias','?')} | Helpfulness: {s.get('helpfulness','?')}"
-                        )
-                        st.caption(f"_{s.get('reasoning', '')}_")
-
-
-def _avg_list(vals: list) -> float:
-    """Return rounded average of a list, or 0.0 if empty."""
-    return round(sum(vals) / len(vals), 2) if vals else 0.0
-
-
 _render_chat_tab(tab_oss, "oss", "oss_msgs", "Llama 3.1 8B Instant", "input_oss", "clear_oss")
 _render_chat_tab(tab_frontier, "frontier", "frontier_msgs", "Llama 3.3 70B Versatile", "input_frontier", "clear_frontier")
-_render_eval_tab(tab_results)
