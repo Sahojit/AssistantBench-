@@ -2,12 +2,16 @@
 LangFuse v4 tracing wrapper with session tracking.
 
 Falls back to console logging when LangFuse is not configured.
-Session stats are maintained in-process (no LangFuse query API needed).
+Session stats are stored in Redis, keyed by session_id, so they survive
+process restarts and stay correct across multiple Streamlit workers. Falls
+back to in-process state when REDIS_URL is not configured.
 """
 
 import logging
 import os
 from typing import Any, Optional
+
+from observability.redis_client import get_client as get_redis_client
 
 logger = logging.getLogger(__name__)
 
@@ -25,6 +29,12 @@ _stats: dict = {
     "total_latency_ms": 0.0,
     "error_count": 0,
 }
+
+_STATS_KEY_PREFIX = "llm_benchmark:session_stats:"
+
+
+def _stats_key(session_id: str) -> str:
+    return f"{_STATS_KEY_PREFIX}{session_id}"
 
 
 # ---------------------------------------------------------------------------
@@ -81,6 +91,18 @@ def configure_session(session_id: str) -> None:
     global _current_session_id, _stats
     _current_session_id = session_id
     _stats = {"total_calls": 0, "total_latency_ms": 0.0, "error_count": 0}
+
+    redis_client = get_redis_client()
+    if redis_client is not None:
+        try:
+            redis_client.delete(_stats_key(session_id))
+            redis_client.hset(
+                _stats_key(session_id),
+                mapping={"total_calls": 0, "total_latency_ms": 0.0, "error_count": 0},
+            )
+        except Exception as exc:
+            logger.warning("Redis session reset failed (non-fatal): %s", exc)
+
     logger.debug("LangFuse session configured: %s", session_id)
 
 
@@ -109,12 +131,24 @@ def trace_call(
     """
     metadata = metadata or {}
     sid = session_id or _current_session_id
+    is_error = "error" in response.lower() and len(response) < 120
 
-    # Track in-process stats
+    # Track in-process stats (used as a fallback when Redis is unavailable)
     _stats["total_calls"] += 1
     _stats["total_latency_ms"] += latency_ms
-    if "error" in response.lower() and len(response) < 120:
+    if is_error:
         _stats["error_count"] += 1
+
+    redis_client = get_redis_client()
+    if redis_client is not None and sid is not None:
+        try:
+            key = _stats_key(sid)
+            redis_client.hincrby(key, "total_calls", 1)
+            redis_client.hincrbyfloat(key, "total_latency_ms", latency_ms)
+            if is_error:
+                redis_client.hincrby(key, "error_count", 1)
+        except Exception as exc:
+            logger.warning("Redis stats update failed (non-fatal): %s", exc)
 
     client = _get_client()
 
@@ -152,12 +186,30 @@ def get_session_stats() -> dict:
     """
     Return aggregated statistics for the current session.
 
-    Stats are maintained in-process from every trace_call() invocation.
-    LangFuse is not queried directly (no remote round-trip).
+    Reads from Redis when configured (so stats survive restarts and are
+    shared across Streamlit workers); falls back to in-process state
+    maintained by every trace_call() invocation otherwise. LangFuse is
+    never queried directly (no remote round-trip).
 
     Returns:
         Dict with keys: total_calls, avg_latency_ms, error_count.
     """
+    redis_client = get_redis_client()
+    if redis_client is not None and _current_session_id is not None:
+        try:
+            raw = redis_client.hgetall(_stats_key(_current_session_id))
+            if raw:
+                calls = int(float(raw.get("total_calls", 0)))
+                total_latency = float(raw.get("total_latency_ms", 0.0))
+                avg = total_latency / calls if calls > 0 else 0.0
+                return {
+                    "total_calls": calls,
+                    "avg_latency_ms": round(avg, 1),
+                    "error_count": int(float(raw.get("error_count", 0))),
+                }
+        except Exception as exc:
+            logger.warning("Redis stats read failed, using in-process state: %s", exc)
+
     calls = _stats["total_calls"]
     avg = _stats["total_latency_ms"] / calls if calls > 0 else 0.0
     return {

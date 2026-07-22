@@ -17,6 +17,7 @@ import sys
 import time
 from datetime import datetime, timezone
 from pathlib import Path
+from uuid import uuid4
 
 _PROJECT_ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(_PROJECT_ROOT))
@@ -29,6 +30,7 @@ from assistants.frontier_assistant import FrontierAssistant  # noqa: E402
 from assistants.oss_assistant import OSSAssistant  # noqa: E402
 from evaluation.judge import Judge  # noqa: E402
 from evaluation.prompts import get_all_prompts  # noqa: E402
+from observability.redis_client import get_client as get_redis_client  # noqa: E402
 
 logging.basicConfig(
     level=logging.INFO,
@@ -41,6 +43,43 @@ RESULTS_PATH = _PROJECT_ROOT / "results" / "eval_results.json"
 LATENCY_REPORT_PATH = _PROJECT_ROOT / "results" / "latency_report.json"
 COST_TABLE_PATH = _PROJECT_ROOT / "cost_latency_table.md"
 INTER_CALL_DELAY = 2.0
+
+_RUN_KEY_PREFIX = "llm_benchmark:eval_run:"
+
+
+def _run_key(run_id: str) -> str:
+    return f"{_RUN_KEY_PREFIX}{run_id}"
+
+
+def _save_result_to_redis(redis_client, run_id: str, result: dict) -> None:
+    """Persist a single prompt's result to Redis immediately after it's scored.
+
+    Uses a hash keyed by run_id with one field per prompt_id, so a crash
+    mid-run only loses the prompt currently in flight — every completed
+    prompt is already durable. Non-fatal if Redis is unreachable.
+    """
+    try:
+        redis_client.hset(_run_key(run_id), str(result["prompt_id"]), json.dumps(result))
+    except Exception as exc:
+        logger.warning("Redis write failed for prompt %s (non-fatal): %s", result["prompt_id"], exc)
+
+
+def _load_results_from_redis(redis_client, run_id: str, fallback: list[dict]) -> list[dict]:
+    """Read back all persisted results for a run, sorted by prompt_id.
+
+    Falls back to the in-memory results list if Redis is unavailable or the
+    hash is empty for any reason.
+    """
+    try:
+        raw = redis_client.hgetall(_run_key(run_id))
+        if not raw:
+            return fallback
+        records = [json.loads(v) for v in raw.values()]
+        records.sort(key=lambda r: r["prompt_id"])
+        return records
+    except Exception as exc:
+        logger.warning("Redis read-back failed, using in-memory results: %s", exc)
+        return fallback
 
 
 def _safe_generate(assistant, prompt: str, label: str) -> tuple[str, float]:
@@ -169,6 +208,11 @@ def run_evaluation() -> dict:
     judge = Judge()
     prompts = get_all_prompts()
 
+    run_id = str(uuid4())
+    redis_client = get_redis_client()
+    if redis_client is not None:
+        logger.info("Persisting per-prompt results to Redis (run_id=%s).", run_id)
+
     results = []
     oss_latencies: list[float] = []
     oss_tokens: list[int] = []
@@ -204,23 +248,32 @@ def run_evaluation() -> dict:
         )
         time.sleep(INTER_CALL_DELAY)
 
-        results.append(
-            {
-                "prompt_id": ep.id,
-                "category": ep.category,
-                "prompt": ep.prompt,
-                "oss_response": oss_response,
-                "oss_latency_ms": round(oss_latency, 1),
-                "frontier_response": frontier_response,
-                "oss_scores": oss_scores,
-                "frontier_scores": frontier_scores,
-            }
-        )
+        result = {
+            "prompt_id": ep.id,
+            "category": ep.category,
+            "prompt": ep.prompt,
+            "oss_response": oss_response,
+            "oss_latency_ms": round(oss_latency, 1),
+            "frontier_response": frontier_response,
+            "oss_scores": oss_scores,
+            "frontier_scores": frontier_scores,
+        }
+        results.append(result)
 
-    # ---- Save eval results -----------------------------------------------
+        if redis_client is not None:
+            _save_result_to_redis(redis_client, run_id, result)
+
+    # ---- Save eval results -------------------------------------------------
+    # Sourced from Redis when available so a crash mid-run doesn't lose
+    # completed prompts; falls back to the in-memory list otherwise.
+    final_results = (
+        _load_results_from_redis(redis_client, run_id, results)
+        if redis_client is not None
+        else results
+    )
     output = {
         "timestamp": datetime.now(timezone.utc).isoformat(),
-        "results": results,
+        "results": final_results,
     }
     RESULTS_PATH.parent.mkdir(parents=True, exist_ok=True)
     with open(RESULTS_PATH, "w", encoding="utf-8") as fh:
