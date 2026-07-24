@@ -1,4 +1,10 @@
-"""LLM-as-judge module: scores model responses using Llama-3.3-70B via Groq."""
+"""
+LLM-as-judge module: scores model responses using Gemini (gemini-flash-lite-latest).
+
+The judge intentionally uses a different model family than the assistants
+being evaluated (Llama via Groq) to avoid the self-grading conflict of
+interest of a model judging its own family's outputs.
+"""
 
 import json
 import logging
@@ -7,11 +13,12 @@ import re
 import time
 from typing import Optional
 
-from groq import Groq  # type: ignore
+from google import genai  # type: ignore
+from google.genai import types  # type: ignore
 
 logger = logging.getLogger(__name__)
 
-JUDGE_MODEL = "llama-3.3-70b-versatile"
+JUDGE_MODEL = "gemini-flash-lite-latest"
 _MAX_RETRIES = 4
 _RETRY_DELAY_FALLBACK = 30.0
 
@@ -39,15 +46,16 @@ Return ONLY valid JSON with no surrounding text or markdown fences:
 
 class Judge:
     """
-    Wraps Llama-3.3-70B via Groq to act as an impartial LLM judge.
+    Wraps Gemini (gemini-flash-lite-latest) to act as an impartial LLM judge, independent of
+    the Llama model family used by both assistants under evaluation.
 
     Parses the model's JSON output and clamps each dimension score to [1, 5].
     Retries on rate-limit errors. Failures return None so the runner handles gracefully.
     """
 
     def __init__(self) -> None:
-        """Initialise the Groq client for judging."""
-        self._client = Groq(api_key=os.getenv("GROQ_API_KEY"))
+        """Initialise the Gemini client for judging."""
+        self._client = genai.Client(api_key=os.getenv("GOOGLE_API_KEY"))
 
     def score(self, category: str, prompt: str, response: str) -> Optional[dict]:
         """
@@ -71,13 +79,14 @@ class Judge:
         raw = ""
         for attempt in range(1, _MAX_RETRIES + 1):
             try:
-                completion = self._client.chat.completions.create(
+                completion = self._client.models.generate_content(
                     model=JUDGE_MODEL,
-                    messages=[{"role": "user", "content": judge_prompt}],
-                    max_tokens=256,
-                    temperature=0.1,
+                    contents=judge_prompt,
+                    config=types.GenerateContentConfig(
+                        temperature=0.1, max_output_tokens=256
+                    ),
                 )
-                raw = completion.choices[0].message.content.strip()
+                raw = (completion.text or "").strip()
 
                 raw = re.sub(r"^```(?:json)?\s*", "", raw)
                 raw = re.sub(r"\s*```$", "", raw)
@@ -97,7 +106,11 @@ class Judge:
 
             except Exception as exc:
                 err_str = str(exc)
-                if "429" in err_str or "rate_limit" in err_str.lower():
+                if (
+                    "429" in err_str
+                    or "rate_limit" in err_str.lower()
+                    or "resource_exhausted" in err_str.lower()
+                ):
                     match = re.search(r"retry after ([0-9.]+)", err_str, re.IGNORECASE)
                     wait = float(match.group(1)) + 1.0 if match else _RETRY_DELAY_FALLBACK
                     if attempt < _MAX_RETRIES:
