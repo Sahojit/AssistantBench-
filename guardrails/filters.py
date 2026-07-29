@@ -189,14 +189,19 @@ def scan_output(text: str) -> str:
 
 def check_output_toxicity(response: str, prompt: str) -> tuple[str, bool]:
     """
-    Layer 4: score model output for toxicity using Gemini Flash.
+    Layer 4: score model output for toxicity using Groq (Llama 3.3 70B).
 
-    Calls Gemini to rate the response 0.0–1.0. If flagged or score > 0.7,
+    Calls Groq to rate the response 0.0–1.0. If flagged or score > 0.7,
     replaces the response with a safe refusal and logs the incident to
     results/flagged_responses.jsonl.
 
+    Kept on Groq rather than moved to the Gemini judge model: this check
+    runs inline on every chat() call and needs to share Groq's low
+    per-call latency, whereas the judge runs offline in the eval batch
+    where an extra provider round-trip doesn't affect user-facing latency.
+
     Only called from chat() methods, never from generate_for_eval().
-    Silently returns the original response if Gemini is unreachable.
+    Silently returns the original response if Groq is unreachable.
 
     Args:
         response: The model response after Layer 3 scanning.
