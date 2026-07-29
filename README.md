@@ -111,7 +111,8 @@ llm-benchmark/
 │   ├── tools.py               # Calculator + datetime implementations
 │   └── tool_router.py         # Dispatches tools before each model call
 ├── observability/
-│   └── tracer.py              # LangFuse v4 tracing + in-process session stats
+│   ├── tracer.py               # LangFuse v4 tracing + Redis-backed session stats
+│   └── redis_client.py         # Lazy Redis client (falls back to None if unconfigured)
 ├── report/
 │   └── generate_report.py     # Bar charts + PDF export via ReportLab
 ├── hf_space/
@@ -119,6 +120,8 @@ llm-benchmark/
 │   ├── requirements.txt
 │   └── README.md              # HF Spaces metadata header
 ├── results/                   # Written at runtime (gitignored)
+├── Dockerfile                 # Streamlit app image
+├── docker-compose.yml         # App + Redis for local dev
 ├── .env.example               # Environment variable template
 ├── render.yaml                # Render.com deploy configuration
 └── requirements.txt
@@ -153,15 +156,43 @@ cp .env.example .env
 Edit `.env`:
 
 ```env
-GROQ_API_KEY=your_groq_key          # Required — console.groq.com
+GROQ_API_KEY=your_groq_key          # Required — console.groq.com (both assistants)
+GOOGLE_API_KEY=your_gemini_key      # Required — aistudio.google.com (independent judge + optional PDF recommendation)
 LANGFUSE_PUBLIC_KEY=your_key        # Optional — cloud.langfuse.com
 LANGFUSE_SECRET_KEY=your_key        # Optional
 LANGFUSE_HOST=https://us.cloud.langfuse.com
+REDIS_URL=redis://localhost:6379/0  # Optional — persists eval results + session stats; falls back to in-memory if unset
 ```
+
+If `REDIS_URL` is unset, both the evaluation runner and the session-stats sidebar fall back to in-memory state — same behavior as before Redis support was added, just without crash-resilience or persistence across restarts.
 
 ```bash
 # 5. Launch
 streamlit run app.py
+```
+
+### Docker (alternative to local setup)
+
+Runs the Streamlit app alongside a local Redis instance — no Python environment setup required.
+
+```bash
+# 1. Clone and configure
+git clone https://github.com/Sahojit/OLLive-LLm-assistantbenchmark.git
+cd OLLive-LLm-assistantbenchmark
+cp .env.example .env
+# edit .env with GROQ_API_KEY, GOOGLE_API_KEY, and optionally LANGFUSE_*
+
+# 2. Launch app + Redis
+docker compose up --build
+```
+
+The app is available at `http://localhost:8501`. `docker-compose.yml` wires `REDIS_URL` to the bundled `redis` service automatically — no need to set it yourself.
+
+To run just the app image against an external Redis (or without Redis at all):
+
+```bash
+docker build -t llm-benchmark .
+docker run -p 8501:8501 --env-file .env llm-benchmark
 ```
 
 ### Run the Evaluation
@@ -188,7 +219,7 @@ Outputs `report/evaluation_report.pdf` with bar charts and a summary table.
 
 **Keyword guardrails, not semantic** — The input filter catches exact keyword matches but can be evaded by paraphrasing. A production system would add LlamaGuard or an embedding-based classifier as an additional layer.
 
-**LLM judge = frontier model family** — Using Llama 70B both as a participant and as the judge could introduce implicit scoring bias. An independent judge from a different model family would eliminate this.
+**LLM judge is now an independent model family** — The judge previously used Llama 3.3 70B via Groq, the same model as the Frontier assistant, which risked self-grading bias. It now uses Gemini (`gemini-flash-lite-latest`) via `google-genai`, a different model family from both assistants under evaluation, so it isn't scoring its own family's outputs.
 
 ---
 
@@ -198,7 +229,6 @@ Outputs `report/evaluation_report.pdf` with bar charts and a summary table.
 - **Streaming responses** — Wire Groq's streaming API through `st.write_stream` to cut perceived latency
 - **Semantic guardrails** — Replace keyword lists with LlamaGuard for semantic safety classification
 - **Judge reliability** — Run each pair through the judge twice and compute Cohen's kappa for confidence intervals
-- **Persistent results** — Store eval results in S3 or Supabase so they survive Render's ephemeral filesystem
 
 ---
 
