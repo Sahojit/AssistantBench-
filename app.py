@@ -20,7 +20,9 @@ sys.path.insert(0, str(Path(__file__).parent))
 
 from assistants.frontier_assistant import FrontierAssistant  # noqa: E402
 from assistants.oss_assistant import OSSAssistant  # noqa: E402
+from evaluation.judge import JUDGE_MODEL  # noqa: E402
 from guardrails.filters import check_input  # noqa: E402
+from observability.redis_client import get_client as get_redis_client  # noqa: E402
 from observability.tracer import configure_session, get_session_stats  # noqa: E402
 
 _PROJECT_ROOT = Path(__file__).parent
@@ -85,11 +87,16 @@ with st.sidebar:
     st.metric("Avg latency (ms)", _stats["avg_latency_ms"])
     st.metric("Errors logged", _stats["error_count"])
     st.caption(f"Session: `{st.session_state.session_id[:8]}…`")
+    if get_redis_client() is not None:
+        st.caption("🟢 Persistence: Redis (stats survive restarts)")
+    else:
+        st.caption("⚪ Persistence: in-memory (set `REDIS_URL` to persist)")
 
     st.divider()
 
     st.subheader("Evaluation")
     st.caption("Runs all 30 prompts against both models and saves JSON results.")
+    st.caption(f"Judge: `{JUDGE_MODEL}` (independent of the Llama models under test)")
 
     if st.button("Run Full Evaluation", use_container_width=True):
         progress_bar = st.progress(0, text="Starting evaluation…")
