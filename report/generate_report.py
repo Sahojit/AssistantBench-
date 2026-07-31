@@ -59,6 +59,10 @@ MODELS = ["oss", "frontier"]
 MODEL_LABELS = {"oss": "Llama 3.1 8B", "frontier": "Llama 3.3 70B"}
 BAR_COLORS = {"oss": "#4C72B0", "frontier": "#DD8452"}
 
+# Same model as evaluation/judge.py — gemini-2.0-flash returns 429
+# RESOURCE_EXHAUSTED (zero free-tier quota) on some API keys.
+RECOMMENDATION_MODEL = "gemini-flash-lite-latest"
+
 
 # ---------------------------------------------------------------------------
 # Data loading and aggregation
@@ -185,7 +189,7 @@ def generate_chart(dimension: str, averages: dict, output_path: Path) -> None:
 
 def generate_recommendation(averages: dict) -> str:
     """
-    Ask Gemini 2.0 Flash to write a 3-sentence recommendation from the scores.
+    Ask Gemini to write a 3-sentence recommendation from the scores.
 
     Falls back to a static recommendation if the API call fails.
 
@@ -222,7 +226,7 @@ def generate_recommendation(averages: dict) -> str:
 
     try:
         result = client.models.generate_content(
-            model="gemini-2.0-flash",
+            model=RECOMMENDATION_MODEL,
             contents=prompt,
             config=types.GenerateContentConfig(temperature=0.4),
         )
